@@ -2,15 +2,15 @@
 pragma solidity 0.8.15;
 
 import { Predeploys } from "src/libraries/Predeploys.sol";
-import { StandardBridge } from "src/universal/StandardBridge.sol";
+import { UsdcBridge } from "src/universal/UsdcBridge.sol";
 import { ISemver } from "src/universal/ISemver.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
 import { Constants } from "src/libraries/Constants.sol";
 
 /// @custom:proxied
-/// @title L1StandardBridge
-/// @notice The L1StandardBridge is responsible for transfering ETH and ERC20 tokens between L1 and
+/// @title L1UsdcBridge
+/// @notice The L1UsdcBridge is responsible for transfering ETH and ERC20 tokens between L1 and
 ///         L2. In the case that an ERC20 token is native to L1, it will be escrowed within this
 ///         contract. If the ERC20 token is native to L2, it will be burnt. Before Bedrock, ETH was
 ///         stored within this contract. After Bedrock, ETH is instead stored inside the
@@ -18,7 +18,7 @@ import { Constants } from "src/libraries/Constants.sol";
 ///         NOTE: this contract is not intended to support all variations of ERC20 tokens. Examples
 ///         of some token types that may not be properly supported by this contract include, but are
 ///         not limited to: tokens with transfer fees, rebasing tokens, and tokens with blocklists.
-contract L1StandardBridge is StandardBridge, ISemver {
+contract L1UsdcBridge is UsdcBridge, ISemver {
     /// @custom:legacy
     /// @notice Emitted whenever a deposit of ETH from L1 into L2 is initiated.
     /// @param from      Address of the depositor.
@@ -76,8 +76,8 @@ contract L1StandardBridge is StandardBridge, ISemver {
     /// @notice Address of the SuperchainConfig contract.
     SuperchainConfig public superchainConfig;
 
-    /// @notice Constructs the L1StandardBridge contract.
-    constructor() StandardBridge() {
+    /// @notice Constructs the L1UsdcBridge contract.
+    constructor() UsdcBridge() {
         initialize({ _messenger: CrossDomainMessenger(address(0)), _superchainConfig: SuperchainConfig(address(0)) });
     }
 
@@ -86,13 +86,13 @@ contract L1StandardBridge is StandardBridge, ISemver {
     /// @param _superchainConfig Contract for the SuperchainConfig on this network.
     function initialize(CrossDomainMessenger _messenger, SuperchainConfig _superchainConfig) public initializer {
         superchainConfig = _superchainConfig;
-        __StandardBridge_init({
+        __UsdcBridge_init({
             _messenger: _messenger,
-            _otherBridge: StandardBridge(payable(Predeploys.L2_STANDARD_BRIDGE))
+            _otherBridge: UsdcBridge(payable(Predeploys.L2_STANDARD_BRIDGE))
         });
     }
 
-    /// @inheritdoc StandardBridge
+    /// @inheritdoc UsdcBridge
     function paused() public view override returns (bool) {
         return superchainConfig.paused();
     }
@@ -115,7 +115,7 @@ contract L1StandardBridge is StandardBridge, ISemver {
     /// @custom:legacy
     /// @notice Deposits some amount of ETH into a target account on L2.
     ///         Note that if ETH is sent to a contract on L2 and the call fails, then that ETH will
-    ///         be locked in the L2StandardBridge. ETH may be recoverable if the call can be
+    ///         be locked in the L2UsdcBridge. ETH may be recoverable if the call can be
     ///         successfully replayed by increasing the amount of gas supplied to the call. If the
     ///         call will fail for any amount of gas, then the ETH will be locked permanently.
     /// @param _to          Address of the recipient on L2.
@@ -251,7 +251,7 @@ contract L1StandardBridge is StandardBridge, ISemver {
         _initiateBridgeERC20(_l1Token, _l2Token, _from, _to, _amount, _minGasLimit, _extraData);
     }
 
-    /// @inheritdoc StandardBridge
+    /// @inheritdoc UsdcBridge
     /// @notice Emits the legacy ETHDepositInitiated event followed by the ETHBridgeInitiated event.
     ///         This is necessary for backwards compatibility with the legacy bridge.
     function _emitETHBridgeInitiated(
@@ -267,7 +267,7 @@ contract L1StandardBridge is StandardBridge, ISemver {
         super._emitETHBridgeInitiated(_from, _to, _amount, _extraData);
     }
 
-    /// @inheritdoc StandardBridge
+    /// @inheritdoc UsdcBridge
     /// @notice Emits the legacy ERC20DepositInitiated event followed by the ERC20BridgeInitiated
     ///         event. This is necessary for backwards compatibility with the legacy bridge.
     function _emitETHBridgeFinalized(
@@ -283,7 +283,7 @@ contract L1StandardBridge is StandardBridge, ISemver {
         super._emitETHBridgeFinalized(_from, _to, _amount, _extraData);
     }
 
-    /// @inheritdoc StandardBridge
+    /// @inheritdoc UsdcBridge
     /// @notice Emits the legacy ERC20WithdrawalFinalized event followed by the ERC20BridgeFinalized
     ///         event. This is necessary for backwards compatibility with the legacy bridge.
     function _emitERC20BridgeInitiated(
@@ -301,7 +301,7 @@ contract L1StandardBridge is StandardBridge, ISemver {
         super._emitERC20BridgeInitiated(_localToken, _remoteToken, _from, _to, _amount, _extraData);
     }
 
-    /// @inheritdoc StandardBridge
+    /// @inheritdoc UsdcBridge
     /// @notice Emits the legacy ERC20WithdrawalFinalized event followed by the ERC20BridgeFinalized
     ///         event. This is necessary for backwards compatibility with the legacy bridge.
     function _emitERC20BridgeFinalized(

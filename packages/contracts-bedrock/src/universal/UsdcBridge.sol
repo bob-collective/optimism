@@ -12,11 +12,11 @@ import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /// @custom:upgradeable
-/// @title StandardBridge
-/// @notice StandardBridge is a base contract for the L1 and L2 standard ERC20 bridges. It handles
+/// @title UsdcBridge
+/// @notice UsdcBridge is a base contract for the L1 and L2 standard ERC20 bridges. It handles
 ///         the core bridging logic, including escrowing tokens that are native to the local chain
 ///         and minting/burning tokens that are native to the remote chain.
-abstract contract StandardBridge is Initializable {
+abstract contract UsdcBridge is Initializable {
     using SafeERC20 for IERC20;
 
     /// @notice The L2 gas limit set when eth is depoisited using the receive() function.
@@ -41,7 +41,7 @@ abstract contract StandardBridge is Initializable {
 
     /// @notice Corresponding bridge on the other domain.
     /// @custom:network-specific
-    StandardBridge public otherBridge;
+    UsdcBridge public otherBridge;
 
     /// @notice Reserve extra slots (to a total of 50) in the storage layout for future upgrades.
     ///         A gap size of 45 was chosen here, so that the first slot used in a child contract
@@ -98,7 +98,7 @@ abstract contract StandardBridge is Initializable {
     ///         calling code within their constructors, but also doesn't really matter since we're
     ///         just trying to prevent users accidentally depositing with smart contract wallets.
     modifier onlyEOA() {
-        require(!Address.isContract(msg.sender), "StandardBridge: function can only be called from an EOA");
+        require(!Address.isContract(msg.sender), "UsdcBridge: function can only be called from an EOA");
         _;
     }
 
@@ -106,17 +106,17 @@ abstract contract StandardBridge is Initializable {
     modifier onlyOtherBridge() {
         require(
             msg.sender == address(messenger) && messenger.xDomainMessageSender() == address(otherBridge),
-            "StandardBridge: function can only be called from the other bridge"
+            "UsdcBridge: function can only be called from the other bridge"
         );
         _;
     }
 
     /// @notice Initializer.
     /// @param _messenger   Contract for CrossDomainMessenger on this network.
-    /// @param _otherBridge Contract for the other StandardBridge contract.
-    function __StandardBridge_init(
+    /// @param _otherBridge Contract for the other UsdcBridge contract.
+    function __UsdcBridge_init(
         CrossDomainMessenger _messenger,
-        StandardBridge _otherBridge
+        UsdcBridge _otherBridge
     )
         internal
         onlyInitializing
@@ -141,7 +141,7 @@ abstract contract StandardBridge is Initializable {
     ///         Public getter is legacy and will be removed in the future. Use `otherBridge` instead.
     /// @return Contract of the bridge on the other network.
     /// @custom:legacy
-    function OTHER_BRIDGE() external view returns (StandardBridge) {
+    function OTHER_BRIDGE() external view returns (UsdcBridge) {
         return otherBridge;
     }
 
@@ -164,9 +164,9 @@ abstract contract StandardBridge is Initializable {
 
     /// @notice Sends ETH to a receiver's address on the other chain. Note that if ETH is sent to a
     ///         smart contract and the call fails, the ETH will be temporarily locked in the
-    ///         StandardBridge on the other chain until the call is replayed. If the call cannot be
+    ///         UsdcBridge on the other chain until the call is replayed. If the call cannot be
     ///         replayed with any amount of gas (call always reverts), then the ETH will be
-    ///         permanently locked in the StandardBridge on the other chain. ETH will also
+    ///         permanently locked in the UsdcBridge on the other chain. ETH will also
     ///         be locked if the receiver is the other bridge, because finalizeBridgeETH will revert
     ///         in that case.
     /// @param _to          Address of the receiver.
@@ -230,7 +230,7 @@ abstract contract StandardBridge is Initializable {
     }
 
     /// @notice Finalizes an ETH bridge on this chain. Can only be triggered by the other
-    ///         StandardBridge contract on the remote chain.
+    ///         UsdcBridge contract on the remote chain.
     /// @param _from      Address of the sender.
     /// @param _to        Address of the receiver.
     /// @param _amount    Amount of ETH being bridged.
@@ -247,21 +247,21 @@ abstract contract StandardBridge is Initializable {
         payable
         onlyOtherBridge
     {
-        require(paused() == false, "StandardBridge: paused");
-        require(msg.value == _amount, "StandardBridge: amount sent does not match amount required");
-        require(_to != address(this), "StandardBridge: cannot send to self");
-        require(_to != address(messenger), "StandardBridge: cannot send to messenger");
+        require(paused() == false, "UsdcBridge: paused");
+        require(msg.value == _amount, "UsdcBridge: amount sent does not match amount required");
+        require(_to != address(this), "UsdcBridge: cannot send to self");
+        require(_to != address(messenger), "UsdcBridge: cannot send to messenger");
 
         // Emit the correct events. By default this will be _amount, but child
         // contracts may override this function in order to emit legacy events as well.
         _emitETHBridgeFinalized(_from, _to, _amount, _extraData);
 
         bool success = SafeCall.call(_to, gasleft(), _amount, hex"");
-        require(success, "StandardBridge: ETH transfer failed");
+        require(success, "UsdcBridge: ETH transfer failed");
     }
 
     /// @notice Finalizes an ERC20 bridge on this chain. Can only be triggered by the other
-    ///         StandardBridge contract on the remote chain.
+    ///         UsdcBridge contract on the remote chain.
     /// @param _localToken  Address of the ERC20 on this chain.
     /// @param _remoteToken Address of the corresponding token on the remote chain.
     /// @param _from        Address of the sender.
@@ -281,11 +281,11 @@ abstract contract StandardBridge is Initializable {
         public
         onlyOtherBridge
     {
-        require(paused() == false, "StandardBridge: paused");
+        require(paused() == false, "UsdcBridge: paused");
         if (_isOptimismMintableERC20(_localToken)) {
             require(
                 _isCorrectTokenPair(_localToken, _remoteToken),
-                "StandardBridge: wrong remote token for Optimism Mintable ERC20 local token"
+                "UsdcBridge: wrong remote token for Optimism Mintable ERC20 local token"
             );
 
             OptimismMintableERC20(_localToken).mint(_to, _amount);
@@ -316,7 +316,7 @@ abstract contract StandardBridge is Initializable {
     )
         internal
     {
-        require(msg.value == _amount, "StandardBridge: bridging ETH must include sufficient ETH value");
+        require(msg.value == _amount, "UsdcBridge: bridging ETH must include sufficient ETH value");
 
         // Emit the correct events. By default this will be _amount, but child
         // contracts may override this function in order to emit legacy events as well.
@@ -352,7 +352,7 @@ abstract contract StandardBridge is Initializable {
         if (_isOptimismMintableERC20(_localToken)) {
             require(
                 _isCorrectTokenPair(_localToken, _remoteToken),
-                "StandardBridge: wrong remote token for Optimism Mintable ERC20 local token"
+                "UsdcBridge: wrong remote token for Optimism Mintable ERC20 local token"
             );
 
             OptimismMintableERC20(_localToken).burn(_from, _amount);
