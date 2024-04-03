@@ -4,16 +4,13 @@ pragma solidity 0.8.15;
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { UsdcBridge } from "src/universal/UsdcBridge.sol";
 import { ISemver } from "src/universal/ISemver.sol";
-import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { Constants } from "src/libraries/Constants.sol";
 
 /// @custom:proxied
-/// @custom:predeploy 0x4200000000000000000000000000000000000010
 /// @title L2UsdcBridge
-/// @notice The L2UsdcBridge is responsible for transfering ETH and ERC20 tokens between L1 and
-///         L2. In the case that an ERC20 token is native to L2, it will be escrowed within this
-///         contract. If the ERC20 token is native to L1, it will be burnt.
+/// @notice The L2UsdcBridge is responsible for transfering USDC tokens between L1 and
+///         L2.
 ///         NOTE: this contract is not intended to support all variations of ERC20 tokens. Examples
 ///         of some token types that may not be properly supported by this contract include, but are
 ///         not limited to: tokens with transfer fees, rebasing tokens, and tokens with blocklists.
@@ -56,30 +53,26 @@ contract L2UsdcBridge is UsdcBridge, ISemver {
     string public constant version = "1.8.0";
 
     /// @notice Constructs the L2UsdcBridge contract.
-    constructor() UsdcBridge() {
-        initialize({ _otherBridge: UsdcBridge(payable(address(0))) });
-    }
+    constructor() UsdcBridge() { }
 
-    /// @notice Initializer.
-    /// @param _otherBridge Contract for the corresponding bridge on the other chain.
-    function initialize(UsdcBridge _otherBridge) public initializer {
+    /// @notice Initializes the contract.
+    /// @param _otherBridge The L1 bridge address.
+    /// @param _l1Usdc      The ERC20 address on the L1.
+    /// @param _l2Usdc      The ERC20 address on the L2.
+    /// @param _owner       The initial owner of this contract.
+    function initialize(UsdcBridge _otherBridge, address _l1Usdc, address _l2Usdc, address _owner) public initializer {
         __UsdcBridge_init({
             _messenger: CrossDomainMessenger(Predeploys.L2_CROSS_DOMAIN_MESSENGER),
-            _otherBridge: _otherBridge
+            _otherBridge: _otherBridge,
+            _l1Usdc: _l1Usdc,
+            _l2Usdc: _l2Usdc,
+            _owner: _owner
         });
-    }
-
-    /// @notice Allows EOAs to bridge ETH by sending directly to the bridge.
-    receive() external payable override onlyEOA {
-        _initiateWithdrawal(
-            Predeploys.LEGACY_ERC20_ETH, msg.sender, msg.sender, msg.value, RECEIVE_DEFAULT_GAS_LIMIT, bytes("")
-        );
     }
 
     /// @custom:legacy
     /// @notice Initiates a withdrawal from L2 to L1.
-    ///         This function only works with OptimismMintableERC20 tokens or ether. Use the
-    ///         `bridgeERC20` function to bridge native L2 tokens to L1.
+    ///         This function only works with Usdc
     /// @param _l2Token     Address of the L2 token to withdraw.
     /// @param _amount      Amount of the L2 token to withdraw.
     /// @param _minGasLimit Minimum gas limit to use for the transaction.
@@ -100,12 +93,7 @@ contract L2UsdcBridge is UsdcBridge, ISemver {
 
     /// @custom:legacy
     /// @notice Initiates a withdrawal from L2 to L1 to a target account on L1.
-    ///         Note that if ETH is sent to a contract on L1 and the call fails, then that ETH will
-    ///         be locked in the L1UsdcBridge. ETH may be recoverable if the call can be
-    ///         successfully replayed by increasing the amount of gas supplied to the call. If the
-    ///         call will fail for any amount of gas, then the ETH will be locked permanently.
-    ///         This function only works with OptimismMintableERC20 tokens or ether. Use the
-    ///         `bridgeERC20To` function to bridge native L2 tokens to L1.
+    ///         This function only works for usdc.
     /// @param _l2Token     Address of the L2 token to withdraw.
     /// @param _to          Recipient account on L1.
     /// @param _amount      Amount of the L2 token to withdraw.
@@ -126,8 +114,7 @@ contract L2UsdcBridge is UsdcBridge, ISemver {
     }
 
     /// @custom:legacy
-    /// @notice Finalizes a deposit from L1 to L2. To finalize a deposit of ether, use address(0)
-    ///         and the l1Token and the Legacy ERC20 ether predeploy address as the l2Token.
+    /// @notice Finalizes a deposit from L1 to L2.
     /// @param _l1Token   Address of the L1 token to deposit.
     /// @param _l2Token   Address of the corresponding L2 token.
     /// @param _from      Address of the depositor.
@@ -146,8 +133,8 @@ contract L2UsdcBridge is UsdcBridge, ISemver {
         payable
         virtual
     {
-        if (_l1Token == address(0) && _l2Token == Predeploys.LEGACY_ERC20_ETH) {
-            finalizeBridgeETH(_from, _to, _amount, _extraData);
+        if (!_isL1Usdc(_l1Token) || !_isL2Usdc(_l2Token)) {
+            revert("Only USDC allowed");
         } else {
             finalizeBridgeERC20(_l2Token, _l1Token, _from, _to, _amount, _extraData);
         }
@@ -178,44 +165,11 @@ contract L2UsdcBridge is UsdcBridge, ISemver {
     )
         internal
     {
-        if (_l2Token == Predeploys.LEGACY_ERC20_ETH) {
-            _initiateBridgeETH(_from, _to, _amount, _minGasLimit, _extraData);
+        if (!_isL2Usdc(_l2Token)) {
+            revert("Only USDC allowed");
         } else {
-            address l1Token = OptimismMintableERC20(_l2Token).l1Token();
-            _initiateBridgeERC20(_l2Token, l1Token, _from, _to, _amount, _minGasLimit, _extraData);
+            _initiateBridgeERC20(_l2Token, l1Usdc, _from, _to, _amount, _minGasLimit, _extraData);
         }
-    }
-
-    /// @notice Emits the legacy WithdrawalInitiated event followed by the ETHBridgeInitiated event.
-    ///         This is necessary for backwards compatibility with the legacy bridge.
-    /// @inheritdoc UsdcBridge
-    function _emitETHBridgeInitiated(
-        address _from,
-        address _to,
-        uint256 _amount,
-        bytes memory _extraData
-    )
-        internal
-        override
-    {
-        emit WithdrawalInitiated(address(0), Predeploys.LEGACY_ERC20_ETH, _from, _to, _amount, _extraData);
-        super._emitETHBridgeInitiated(_from, _to, _amount, _extraData);
-    }
-
-    /// @notice Emits the legacy DepositFinalized event followed by the ETHBridgeFinalized event.
-    ///         This is necessary for backwards compatibility with the legacy bridge.
-    /// @inheritdoc UsdcBridge
-    function _emitETHBridgeFinalized(
-        address _from,
-        address _to,
-        uint256 _amount,
-        bytes memory _extraData
-    )
-        internal
-        override
-    {
-        emit DepositFinalized(address(0), Predeploys.LEGACY_ERC20_ETH, _from, _to, _amount, _extraData);
-        super._emitETHBridgeFinalized(_from, _to, _amount, _extraData);
     }
 
     /// @notice Emits the legacy WithdrawalInitiated event followed by the ERC20BridgeInitiated

@@ -5,35 +5,16 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 import { UsdcBridge } from "src/universal/UsdcBridge.sol";
 import { ISemver } from "src/universal/ISemver.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
-import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
-import { Constants } from "src/libraries/Constants.sol";
+import { IPartialUsdc } from "src/L1/IPartialUsdc.sol";
 
 /// @custom:proxied
 /// @title L1UsdcBridge
-/// @notice The L1UsdcBridge is responsible for transfering ETH and ERC20 tokens between L1 and
+/// @notice The L1UsdcBridge is responsible for transfering USDC tokens between L1 and
 ///         L2. In the case that an ERC20 token is native to L1, it will be escrowed within this
-///         contract. If the ERC20 token is native to L2, it will be burnt. Before Bedrock, ETH was
-///         stored within this contract. After Bedrock, ETH is instead stored inside the
-///         OptimismPortal contract.
-///         NOTE: this contract is not intended to support all variations of ERC20 tokens. Examples
-///         of some token types that may not be properly supported by this contract include, but are
-///         not limited to: tokens with transfer fees, rebasing tokens, and tokens with blocklists.
+///         contract. If the ERC20 token is native to L2, it will be burnt.
 contract L1UsdcBridge is UsdcBridge, ISemver {
-    /// @custom:legacy
-    /// @notice Emitted whenever a deposit of ETH from L1 into L2 is initiated.
-    /// @param from      Address of the depositor.
-    /// @param to        Address of the recipient on L2.
-    /// @param amount    Amount of ETH deposited.
-    /// @param extraData Extra data attached to the deposit.
-    event ETHDepositInitiated(address indexed from, address indexed to, uint256 amount, bytes extraData);
-
-    /// @custom:legacy
-    /// @notice Emitted whenever a withdrawal of ETH from L2 to L1 is finalized.
-    /// @param from      Address of the withdrawer.
-    /// @param to        Address of the recipient on L1.
-    /// @param amount    Amount of ETH withdrawn.
-    /// @param extraData Extra data attached to the withdrawal.
-    event ETHWithdrawalFinalized(address indexed from, address indexed to, uint256 amount, bytes extraData);
+    /// @notice The address that is allowed to burn the held USDC.
+    address public burner;
 
     /// @custom:legacy
     /// @notice Emitted whenever an ERC20 deposit is initiated.
@@ -73,58 +54,49 @@ contract L1UsdcBridge is UsdcBridge, ISemver {
     /// @custom:semver 2.1.0
     string public constant version = "2.1.0";
 
-    /// @notice Address of the SuperchainConfig contract.
-    SuperchainConfig public superchainConfig;
-
     /// @notice Constructs the L1UsdcBridge contract.
-    constructor() UsdcBridge() {
-        initialize({ _messenger: CrossDomainMessenger(address(0)), _superchainConfig: SuperchainConfig(address(0)) });
-    }
+    constructor() UsdcBridge() { }
 
-    /// @notice Initializer.
-    /// @param _messenger        Contract for the CrossDomainMessenger on this network.
-    /// @param _superchainConfig Contract for the SuperchainConfig on this network.
-    function initialize(CrossDomainMessenger _messenger, SuperchainConfig _superchainConfig) public initializer {
-        superchainConfig = _superchainConfig;
+    /// @notice Initializes the contract.
+    /// @param _messenger   The cross domain messenger proxy.
+    /// @param _otherBridge The L2 bridge address.
+    /// @param _l1Usdc      The ERC20 address on the L1.
+    /// @param _l2Usdc      The ERC20 address on the L2.
+    /// @param _owner       The initial owner of this contract.
+    function initialize(
+        CrossDomainMessenger _messenger,
+        UsdcBridge _otherBridge,
+        address _l1Usdc,
+        address _l2Usdc,
+        address _owner
+    )
+        public
+        initializer
+    {
         __UsdcBridge_init({
             _messenger: _messenger,
-            _otherBridge: UsdcBridge(payable(Predeploys.L2_STANDARD_BRIDGE))
+            _otherBridge: _otherBridge,
+            _l1Usdc: _l1Usdc,
+            _l2Usdc: _l2Usdc,
+            _owner: _owner
         });
     }
 
-    /// @inheritdoc UsdcBridge
-    function paused() public view override returns (bool) {
-        return superchainConfig.paused();
+    /// @notice Whitelists an account that will be able to burn the held usdc.
+    ///         This function is callable only once.
+    function whitelistBurner(address _burner) external onlyOwner {
+        require(_burner != address(0), "Burner address can not be zero");
+        require(burner == address(0), "Burner address already set");
+        burner = _burner;
     }
 
-    /// @notice Allows EOAs to bridge ETH by sending directly to the bridge.
-    receive() external payable override onlyEOA {
-        _initiateETHDeposit(msg.sender, msg.sender, RECEIVE_DEFAULT_GAS_LIMIT, bytes(""));
-    }
+    /// @notice Burns all the l1 token held by this contract.
+    function burnLockedUSDC() external {
+        require(msg.sender == burner, "Not whitelisted");
 
-    /// @custom:legacy
-    /// @notice Deposits some amount of ETH into the sender's account on L2.
-    /// @param _minGasLimit Minimum gas limit for the deposit message on L2.
-    /// @param _extraData   Optional data to forward to L2.
-    ///                     Data supplied here will not be used to execute any code on L2 and is
-    ///                     only emitted as extra data for the convenience of off-chain tooling.
-    function depositETH(uint32 _minGasLimit, bytes calldata _extraData) external payable onlyEOA {
-        _initiateETHDeposit(msg.sender, msg.sender, _minGasLimit, _extraData);
-    }
-
-    /// @custom:legacy
-    /// @notice Deposits some amount of ETH into a target account on L2.
-    ///         Note that if ETH is sent to a contract on L2 and the call fails, then that ETH will
-    ///         be locked in the L2UsdcBridge. ETH may be recoverable if the call can be
-    ///         successfully replayed by increasing the amount of gas supplied to the call. If the
-    ///         call will fail for any amount of gas, then the ETH will be locked permanently.
-    /// @param _to          Address of the recipient on L2.
-    /// @param _minGasLimit Minimum gas limit for the deposit message on L2.
-    /// @param _extraData   Optional data to forward to L2.
-    ///                     Data supplied here will not be used to execute any code on L2 and is
-    ///                     only emitted as extra data for the convenience of off-chain tooling.
-    function depositETHTo(address _to, uint32 _minGasLimit, bytes calldata _extraData) external payable {
-        _initiateETHDeposit(msg.sender, _to, _minGasLimit, _extraData);
+        IPartialUsdc token = IPartialUsdc(l1Usdc);
+        uint256 balance = token.balanceOf(address(this));
+        token.burn(balance);
     }
 
     /// @custom:legacy
@@ -175,24 +147,6 @@ contract L1UsdcBridge is UsdcBridge, ISemver {
     }
 
     /// @custom:legacy
-    /// @notice Finalizes a withdrawal of ETH from L2.
-    /// @param _from      Address of the withdrawer on L2.
-    /// @param _to        Address of the recipient on L1.
-    /// @param _amount    Amount of ETH to withdraw.
-    /// @param _extraData Optional data forwarded from L2.
-    function finalizeETHWithdrawal(
-        address _from,
-        address _to,
-        uint256 _amount,
-        bytes calldata _extraData
-    )
-        external
-        payable
-    {
-        finalizeBridgeETH(_from, _to, _amount, _extraData);
-    }
-
-    /// @custom:legacy
     /// @notice Finalizes a withdrawal of ERC20 tokens from L2.
     /// @param _l1Token   Address of the token on L1.
     /// @param _l2Token   Address of the corresponding token on L2.
@@ -220,15 +174,6 @@ contract L1UsdcBridge is UsdcBridge, ISemver {
         return address(otherBridge);
     }
 
-    /// @notice Internal function for initiating an ETH deposit.
-    /// @param _from        Address of the sender on L1.
-    /// @param _to          Address of the recipient on L2.
-    /// @param _minGasLimit Minimum gas limit for the deposit message on L2.
-    /// @param _extraData   Optional data to forward to L2.
-    function _initiateETHDeposit(address _from, address _to, uint32 _minGasLimit, bytes memory _extraData) internal {
-        _initiateBridgeETH(_from, _to, msg.value, _minGasLimit, _extraData);
-    }
-
     /// @notice Internal function for initiating an ERC20 deposit.
     /// @param _l1Token     Address of the L1 token being deposited.
     /// @param _l2Token     Address of the corresponding token on L2.
@@ -249,38 +194,6 @@ contract L1UsdcBridge is UsdcBridge, ISemver {
         internal
     {
         _initiateBridgeERC20(_l1Token, _l2Token, _from, _to, _amount, _minGasLimit, _extraData);
-    }
-
-    /// @inheritdoc UsdcBridge
-    /// @notice Emits the legacy ETHDepositInitiated event followed by the ETHBridgeInitiated event.
-    ///         This is necessary for backwards compatibility with the legacy bridge.
-    function _emitETHBridgeInitiated(
-        address _from,
-        address _to,
-        uint256 _amount,
-        bytes memory _extraData
-    )
-        internal
-        override
-    {
-        emit ETHDepositInitiated(_from, _to, _amount, _extraData);
-        super._emitETHBridgeInitiated(_from, _to, _amount, _extraData);
-    }
-
-    /// @inheritdoc UsdcBridge
-    /// @notice Emits the legacy ERC20DepositInitiated event followed by the ERC20BridgeInitiated
-    ///         event. This is necessary for backwards compatibility with the legacy bridge.
-    function _emitETHBridgeFinalized(
-        address _from,
-        address _to,
-        uint256 _amount,
-        bytes memory _extraData
-    )
-        internal
-        override
-    {
-        emit ETHWithdrawalFinalized(_from, _to, _amount, _extraData);
-        super._emitETHBridgeFinalized(_from, _to, _amount, _extraData);
     }
 
     /// @inheritdoc UsdcBridge
