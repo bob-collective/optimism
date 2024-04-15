@@ -61,6 +61,7 @@ contract UsdcManager is Ownable {
     /// @param owner Address to transfer the roles to.
     function transferUSDCRoles(address owner) external {
         require(msg.sender == whitelistedTakeoverOrigin, "Unauthorized transfer");
+        require(owner != address(0), "Can not transfer ownership to the zero address");
 
         // Change proxy admin
         IUsdcProxy(tokenProxyAddress).changeAdmin(owner);
