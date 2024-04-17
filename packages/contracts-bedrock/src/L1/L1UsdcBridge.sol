@@ -231,4 +231,9 @@ contract L1UsdcBridge is UsdcBridge, ISemver {
         emit ERC20WithdrawalFinalized(_localToken, _remoteToken, _from, _to, _amount, _extraData);
         super._emitERC20BridgeFinalized(_localToken, _remoteToken, _from, _to, _amount, _extraData);
     }
+
+    /// @inheritdoc UsdcBridge
+    function _isCorrectUsdcTokenPair(address _localToken, address _remoteToken) internal view override returns (bool) {
+        return _isL1Usdc(_localToken) && _isL2Usdc(_remoteToken);
+    }
 }

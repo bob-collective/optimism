@@ -133,11 +133,7 @@ contract L2UsdcBridge is UsdcBridge, ISemver {
         payable
         virtual
     {
-        if (!_isL1Usdc(_l1Token) || !_isL2Usdc(_l2Token)) {
-            revert("Only USDC allowed");
-        } else {
-            finalizeBridgeERC20(_l2Token, _l1Token, _from, _to, _amount, _extraData);
-        }
+        finalizeBridgeERC20(_l2Token, _l1Token, _from, _to, _amount, _extraData);
     }
 
     /// @custom:legacy
@@ -165,11 +161,7 @@ contract L2UsdcBridge is UsdcBridge, ISemver {
     )
         internal
     {
-        if (!_isL2Usdc(_l2Token)) {
-            revert("Only USDC allowed");
-        } else {
-            _initiateBridgeERC20(_l2Token, l1Usdc, _from, _to, _amount, _minGasLimit, _extraData);
-        }
+        _initiateBridgeERC20(_l2Token, l1Usdc, _from, _to, _amount, _minGasLimit, _extraData);
     }
 
     /// @notice Emits the legacy WithdrawalInitiated event followed by the ERC20BridgeInitiated
@@ -206,5 +198,10 @@ contract L2UsdcBridge is UsdcBridge, ISemver {
     {
         emit DepositFinalized(_remoteToken, _localToken, _from, _to, _amount, _extraData);
         super._emitERC20BridgeFinalized(_localToken, _remoteToken, _from, _to, _amount, _extraData);
+    }
+
+    /// @inheritdoc UsdcBridge
+    function _isCorrectUsdcTokenPair(address _localToken, address _remoteToken) internal view override returns (bool) {
+        return _isL2Usdc(_localToken) && _isL1Usdc(_remoteToken);
     }
 }

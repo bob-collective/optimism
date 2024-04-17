@@ -244,6 +244,10 @@ abstract contract UsdcBridge is Initializable, Pausable, Ownable {
         public
         onlyOtherBridge
     {
+        // this check is not strictly required as it should have been ensured by the
+        // remote bridge, but doesn't hurt.
+        require(_isCorrectUsdcTokenPair(_localToken, _remoteToken), "Invalid token pair");
+
         if (_isL2Usdc(_localToken) && _isL1Usdc(_remoteToken)) {
             // L1 --> L2
             IPartialUsdc(_localToken).mint(_to, _amount);
@@ -252,6 +256,7 @@ abstract contract UsdcBridge is Initializable, Pausable, Ownable {
             deposits[_localToken][_remoteToken] = deposits[_localToken][_remoteToken] - _amount;
             IERC20(_localToken).safeTransfer(_to, _amount);
         } else {
+            // should be unreachable
             revert("Invalid token pair");
         }
 
@@ -281,6 +286,8 @@ abstract contract UsdcBridge is Initializable, Pausable, Ownable {
         internal
         whenNotPaused
     {
+        require(_isCorrectUsdcTokenPair(_localToken, _remoteToken), "Invalid token pair");
+
         if (_isL2Usdc(_localToken) && _isL1Usdc(_remoteToken)) {
             // L2 --> L1
             // usdc has no burnFrom, so first transfer to the contract and then burn.
@@ -291,6 +298,7 @@ abstract contract UsdcBridge is Initializable, Pausable, Ownable {
             IERC20(_localToken).safeTransferFrom(_from, address(this), _amount);
             deposits[_localToken][_remoteToken] = deposits[_localToken][_remoteToken] + _amount;
         } else {
+            // should be unreachable
             revert("Invalid token pair");
         }
 
@@ -359,4 +367,9 @@ abstract contract UsdcBridge is Initializable, Pausable, Ownable {
     {
         emit ERC20BridgeFinalized(_localToken, _remoteToken, _from, _to, _amount, _extraData);
     }
+
+    /// @notice Returns whether or not the given tokens match the usdc pair.
+    /// @param _localToken  Address of the ERC20 on this chain
+    /// @param _remoteToken Address of the ERC20 on the remote chain.
+    function _isCorrectUsdcTokenPair(address _localToken, address _remoteToken) internal view virtual returns (bool);
 }
