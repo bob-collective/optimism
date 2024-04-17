@@ -55,7 +55,8 @@ contract L1UsdcBridge is UsdcBridge, ISemver {
     string public constant version = "2.1.0";
 
     /// @notice Constructs the L1UsdcBridge contract.
-    constructor() UsdcBridge() { }
+    constructor() UsdcBridge() {
+    }
 
     /// @notice Initializes the contract.
     /// @param _messenger   The cross domain messenger proxy.

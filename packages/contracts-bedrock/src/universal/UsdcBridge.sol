@@ -104,6 +104,14 @@ abstract contract UsdcBridge is Initializable, Pausable, Ownable {
         _;
     }
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        // This contract is intended to be used through a proxy. Prevent this contract from being
+        // initialized when not going through a proxy, to prevent problems when people forget to
+        // to do so.
+        _disableInitializers();
+    }
+
     /// @notice Initializer.
     /// @param _messenger   Contract for CrossDomainMessenger on this network.
     /// @param _otherBridge Contract for the other UsdcBridge contract.
