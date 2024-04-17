@@ -2,6 +2,7 @@
 pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 interface IUsdcProxy {
     function changeAdmin(address newAdmin) external;
@@ -17,7 +18,7 @@ interface IMasterMinter {
     function removeMinter() external returns (bool);
 }
 
-contract UsdcManager is Ownable {
+contract UsdcManager is Ownable, Initializable {
     address whitelistedTakeoverOrigin;
     address tokenProxyAddress;
     address masterMinterAddress;
@@ -40,6 +41,7 @@ contract UsdcManager is Ownable {
     )
         public
         onlyOwner
+        initializer
     {
         tokenProxyAddress = _tokenProxyAddress;
         bridgeAddress = _bridgeAddress;
