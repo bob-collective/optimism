@@ -25,6 +25,7 @@ contract UsdcManager is Ownable, Initializable {
     address bridgeAddress;
 
     constructor(address initialOwner) Ownable() {
+        require(initialOwner != address(0), "Owner addres can not be 0");
         transferOwnership(initialOwner);
     }
 
