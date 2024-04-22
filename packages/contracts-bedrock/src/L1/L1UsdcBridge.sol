@@ -91,13 +91,12 @@ contract L1UsdcBridge is UsdcBridge, ISemver {
         burner = _burner;
     }
 
-    /// @notice Burns all the l1 token held by this contract.
+    /// @notice Burns all the l1 token that is bridged to the l2.
     function burnLockedUSDC() external {
         require(msg.sender == burner, "Not whitelisted");
 
-        IPartialUsdc token = IPartialUsdc(l1Usdc);
-        uint256 balance = token.balanceOf(address(this));
-        token.burn(balance);
+        uint256 balance = deposits[l1Usdc][l2Usdc];
+        IPartialUsdc(l1Usdc).burn(balance);
     }
 
     /// @custom:legacy
