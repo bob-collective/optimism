@@ -14,6 +14,7 @@ interface IUsdcImpl {
 
 interface IMasterMinter {
     function configureController(address, address) external;
+    function removeController(address) external;
     function configureMinter(uint256) external;
     function removeMinter() external returns (bool);
 }
@@ -69,8 +70,11 @@ contract UsdcManager is Ownable, Initializable {
         // Change proxy admin
         IUsdcProxy(tokenProxyAddress).changeAdmin(owner);
 
-        // remove minter
+        // remove our minter (i.e. the bridge)
         IMasterMinter(masterMinterAddress).removeMinter();
+
+        // Take our controller role away
+        IMasterMinter(masterMinterAddress).removeController(address(this));
 
         // Transfer implementation owner
         IUsdcImpl(tokenProxyAddress).transferOwnership(owner);
