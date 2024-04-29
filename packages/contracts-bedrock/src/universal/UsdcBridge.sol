@@ -125,6 +125,14 @@ abstract contract UsdcBridge is Initializable, Pausable, Ownable {
         internal
         onlyInitializing
     {
+        require(
+            address(_messenger) != address(0) &&
+                address(_otherBridge) != address(0) &&
+                _l1Usdc != address(0) &&
+                _l2Usdc != address(0) &&
+                _owner != address(0),
+            'Zero address not allowed'
+        );
         messenger = _messenger;
         otherBridge = _otherBridge;
         l1Usdc = _l1Usdc;

@@ -45,6 +45,12 @@ contract UsdcManager is Ownable, Initializable {
         onlyOwner
         initializer
     {
+        require(
+            _bridgeAddress != address(0) &&
+                _masterMinterAddress != address(0) &&
+                _tokenProxyAddress != address(0),
+            'Zero address not allowed'
+        );
         tokenProxyAddress = _tokenProxyAddress;
         bridgeAddress = _bridgeAddress;
         masterMinterAddress = _masterMinterAddress;
