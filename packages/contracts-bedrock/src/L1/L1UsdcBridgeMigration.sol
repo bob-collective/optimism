@@ -15,14 +15,14 @@ contract L1UsdcBridgeMigration is L1UsdcBridge {
     // The remote chain selector for BOB - TODO: use the right one
     uint64 private constant remoteChainSelector = 1;
 
-    function migrateLiquidity() external onlyOwner {
-        // migrate all the liquidity into the token pool
+    function migrateLiquidity() external {
+        // pause contract so no more deposits are allowed
+        _pause();
+
+        // // migrate all the liquidity into the token pool
         IHybridLockReleaseUSDCTokenPool(tokenPool).provideLiquidity(remoteChainSelector, address(this).balance);
 
         // remove the liquidity from this contract by deleting all deposits
         delete deposits[l1Usdc][l2Usdc];
-
-        // pause contract so no more deposits are allowed
-        _pause();
     }
 }
