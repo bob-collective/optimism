@@ -16,6 +16,9 @@ interface IL1ChugSplashProxy {
 contract L1UsdcBridgeMigrationScriptBase {
     address payable constant l1UsdcBridgeProxy = payable(0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb);
 
+    address constant l1Usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address constant l2Usdc = 0xe75D0fB2C24A55cA1e3F96781a2bCC7bdba058F0;
+
     function deployL1UsdcBridgeMigration() internal {
         IL1ChugSplashProxy(l1UsdcBridgeProxy).setCode(type(L1UsdcBridgeMigration).runtimeCode);
 
@@ -31,6 +34,8 @@ contract L1UsdcBridgeMigrationScript is Script, L1UsdcBridgeMigrationScriptBase 
         vm.startBroadcast();
         deployL1UsdcBridgeMigration();
         vm.stopBroadcast();
+
+        require(L1UsdcBridgeMigration(l1UsdcBridgeProxy).deposits(l1Usdc, l2Usdc) == 0, "Liquidity not fully migrated");
     }
 }
 
@@ -42,5 +47,8 @@ contract L1UsdcBridgeMigrationTest is Test, L1UsdcBridgeMigrationScriptBase {
         vm.startPrank(l1UsdcBridgeProxyOwner);
         deployL1UsdcBridgeMigration();
         vm.stopPrank();
+
+        // check there is no liquidity left in the contract
+        assertEq(L1UsdcBridgeMigration(l1UsdcBridgeProxy).deposits(l1Usdc, l2Usdc), 0);
     }
 }

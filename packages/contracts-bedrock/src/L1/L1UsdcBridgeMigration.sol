@@ -20,7 +20,7 @@ contract L1UsdcBridgeMigration is L1UsdcBridge {
         _pause();
 
         // // migrate all the liquidity into the token pool
-        IHybridLockReleaseUSDCTokenPool(tokenPool).provideLiquidity(remoteChainSelector, address(this).balance);
+        IHybridLockReleaseUSDCTokenPool(tokenPool).provideLiquidity(remoteChainSelector, deposits[l1Usdc][l2Usdc]);
 
         // remove the liquidity from this contract by deleting all deposits
         delete deposits[l1Usdc][l2Usdc];
