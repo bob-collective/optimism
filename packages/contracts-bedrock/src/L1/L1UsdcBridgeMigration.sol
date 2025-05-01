@@ -17,9 +17,6 @@ contract L1UsdcBridgeMigration is L1UsdcBridge {
     uint64 private constant remoteChainSelector = 3849287863852499584;
 
     function migrateLiquidity() external onlyOwner {
-        // pause contract so no more deposits are allowed
-        _pause();
-
         // get the amount of tokens to migrate
         uint256 migrationAmount = deposits[l1Usdc][l2Usdc];
 
