@@ -5,6 +5,7 @@ import { Script } from "forge-std/Script.sol";
 import { Test } from "forge-std/Test.sol";
 import { console2 as console } from "forge-std/console2.sol";
 
+import { L1UsdcBridge } from "src/L1/L1UsdcBridge.sol";
 import { L1UsdcBridgeMigration } from "src/L1/L1UsdcBridgeMigration.sol";
 
 interface IL1ChugSplashProxy {
@@ -35,9 +36,11 @@ contract L1UsdcBridgeMigrationScriptBase {
 }
 
 // forge script  scripts/L1UsdcBridgeMigration.s.sol --tc L1UsdcBridgeMigrationScript --fork-url
-// https://eth.llamarpc.com --sender 0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194 --broadcast -vvv
+// https://1rpc.io/eth --sender 0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194 --broadcast -vvv
 contract L1UsdcBridgeMigrationScript is Script, L1UsdcBridgeMigrationScriptBase {
     function run() public {
+        require(L1UsdcBridge(l1UsdcBridgeProxy).paused(), "Bridge is not paused");
+
         // Set 0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194 as the broadcasting account
         vm.startBroadcast();
         migrateLiquidity();
@@ -47,7 +50,7 @@ contract L1UsdcBridgeMigrationScript is Script, L1UsdcBridgeMigrationScriptBase 
     }
 }
 
-// forge test --match-test test_L1UsdcBridgeMigration --fork-url https://eth.llamarpc.com
+// forge test --match-test test_L1UsdcBridgeMigration --fork-url https://1rpc.io/eth
 contract L1UsdcBridgeMigrationTest is Test, L1UsdcBridgeMigrationScriptBase {
     address constant l1UsdcBridgeProxyOwner = 0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194;
 
@@ -57,17 +60,25 @@ contract L1UsdcBridgeMigrationTest is Test, L1UsdcBridgeMigrationScriptBase {
     uint64 remoteChainSelector = 3849287863852499584;
 
     function test_L1UsdcBridgeMigration() public {
+        // pause the bridge
+        vm.startPrank(l1UsdcBridgeProxyOwner);
+        L1UsdcBridge(l1UsdcBridgeProxy).pause();
+        vm.stopPrank();
+
+        require(L1UsdcBridge(l1UsdcBridgeProxy).paused(), "Bridge is not paused");
+
         uint256 migrationAmount = L1UsdcBridgeMigration(l1UsdcBridgeProxy).deposits(l1Usdc, l2Usdc);
 
-        vm.startPrank(tokenPoolOwner);
-        ITokenPool(tokenPool).setLiquidityProvider(remoteChainSelector, l1UsdcBridgeProxy);
-        vm.stopPrank();
+        // Liquidity provider has been set, so we dont need this now
+        // vm.startPrank(tokenPoolOwner);
+        // ITokenPool(tokenPool).setLiquidityProvider(remoteChainSelector, l1UsdcBridgeProxy);
+        // vm.stopPrank();
 
         vm.startPrank(l1UsdcBridgeProxyOwner);
         migrateLiquidity();
         vm.stopPrank();
 
-        // check there is no liquidity left in the contract
+        // check all liquidity has been migrated
         assertEq(L1UsdcBridgeMigration(l1UsdcBridgeProxy).deposits(l1Usdc, l2Usdc), 0);
         assertEq(ITokenPool(tokenPool).getLockedTokensForChain(remoteChainSelector), migrationAmount);
     }
