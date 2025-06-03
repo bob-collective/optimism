@@ -18,12 +18,12 @@ contract L1UsdcBridgeMigration is L1UsdcBridge {
     // The remote chain selector for BOB
     uint64 private constant remoteChainSelector = 3849287863852499584;
 
-    function migrateLiquidity(uint256 inFlightDeposits) external onlyOwner {
+    function migrateLiquidity(uint256 inFlightWithdrawals) external onlyOwner {
         // get the total amount of liquidity in the contract
         uint256 totalLiquidityAmount = deposits[l1Usdc][l2Usdc];
 
         // calculate the amount of tokens to migrate
-        uint256 migrationAmount = totalLiquidityAmount - inFlightDeposits;
+        uint256 migrationAmount = totalLiquidityAmount - inFlightWithdrawals;
 
         // get the amount of tokens locked in the CCIP bridge before the migration
         uint256 lockedTokensInTokenPoolBeforeMigration =
@@ -38,8 +38,8 @@ contract L1UsdcBridgeMigration is L1UsdcBridge {
         // remove the liquidity that was migrated
         deposits[l1Usdc][l2Usdc] -= migrationAmount;
 
-        // only the in flight deposits should be left in the contract
-        require(deposits[l1Usdc][l2Usdc] == inFlightDeposits, "Liquidity not migrated");
+        // only the in flight withdrawals should be left in the contract
+        require(deposits[l1Usdc][l2Usdc] == inFlightWithdrawals, "Liquidity not migrated");
         require(
             ITokenPool(tokenPool).getLockedTokensForChain(remoteChainSelector)
                 == lockedTokensInTokenPoolBeforeMigration + migrationAmount,
