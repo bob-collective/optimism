@@ -28,10 +28,13 @@ contract L1UsdcBridgeMigrationScriptBase {
     address constant l1Usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant l2Usdc = 0xe75D0fB2C24A55cA1e3F96781a2bCC7bdba058F0;
 
-    function migrateLiquidity() internal {
+    // TODO: Get the correct amount of in flight deposits
+    uint256 constant inFlightDeposits = 1000000;
+
+    function migrateLiquidity(uint256 _inFlightDeposits) internal {
         IL1ChugSplashProxy(l1UsdcBridgeProxy).setCode(type(L1UsdcBridgeMigration).runtimeCode);
 
-        L1UsdcBridgeMigration(l1UsdcBridgeProxy).migrateLiquidity();
+        L1UsdcBridgeMigration(l1UsdcBridgeProxy).migrateLiquidity(_inFlightDeposits);
     }
 }
 
@@ -43,10 +46,8 @@ contract L1UsdcBridgeMigrationScript is Script, L1UsdcBridgeMigrationScriptBase 
 
         // Set 0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194 as the broadcasting account
         vm.startBroadcast();
-        migrateLiquidity();
+        migrateLiquidity(inFlightDeposits);
         vm.stopBroadcast();
-
-        require(L1UsdcBridgeMigration(l1UsdcBridgeProxy).deposits(l1Usdc, l2Usdc) == 0, "Liquidity not migrated");
     }
 }
 
@@ -67,7 +68,10 @@ contract L1UsdcBridgeMigrationTest is Test, L1UsdcBridgeMigrationScriptBase {
 
         require(L1UsdcBridge(l1UsdcBridgeProxy).paused(), "Bridge is not paused");
 
-        uint256 migrationAmount = L1UsdcBridgeMigration(l1UsdcBridgeProxy).deposits(l1Usdc, l2Usdc);
+        uint256 lockedTokensInCCIPBridgeBeforeMigration =
+            ITokenPool(tokenPool).getLockedTokensForChain(remoteChainSelector);
+
+        uint256 migrationAmount = L1UsdcBridgeMigration(l1UsdcBridgeProxy).deposits(l1Usdc, l2Usdc) - inFlightDeposits;
 
         // Liquidity provider has been set, so we dont need this now
         // vm.startPrank(tokenPoolOwner);
@@ -75,11 +79,14 @@ contract L1UsdcBridgeMigrationTest is Test, L1UsdcBridgeMigrationScriptBase {
         // vm.stopPrank();
 
         vm.startPrank(l1UsdcBridgeProxyOwner);
-        migrateLiquidity();
+        migrateLiquidity(inFlightDeposits);
         vm.stopPrank();
 
-        // check all liquidity has been migrated
-        assertEq(L1UsdcBridgeMigration(l1UsdcBridgeProxy).deposits(l1Usdc, l2Usdc), 0);
-        assertEq(ITokenPool(tokenPool).getLockedTokensForChain(remoteChainSelector), migrationAmount);
+        // check the correct amount of liquidity has been migrated
+        assertEq(L1UsdcBridgeMigration(l1UsdcBridgeProxy).deposits(l1Usdc, l2Usdc), inFlightDeposits);
+        assertEq(
+            ITokenPool(tokenPool).getLockedTokensForChain(remoteChainSelector),
+            lockedTokensInCCIPBridgeBeforeMigration + migrationAmount
+        );
     }
 }
